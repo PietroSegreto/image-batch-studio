@@ -1,0 +1,25 @@
+# Secrets and local settings
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+.claude/
+.codex/
+.idea/
+.vscode/
+
+# Environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+output/
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+Thumbs.db
+
+# Personal source material and original scripts (kept locally)
+legacy/
+lista_prompt.docx

@@ -1,0 +1,8 @@
+streamlit>=1.40
+google-genai>=1.75
+requests>=2.32
+pillow>=10
+python-docx>=1.1
+openpyxl>=3.1
+python-dotenv>=1.0
+pandas>=2.0
