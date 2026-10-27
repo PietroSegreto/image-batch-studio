@@ -8,12 +8,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 import requests
-from config import MODELS
-from history import create_run, load_run, run_saved, effective_status, atomic_json, run_lock, is_running
-from prompt_files import PromptJob
-from providers.base import GeneratedImage, GenerationParams
-from providers.bfl_provider import BFLProvider
-from providers.retry import RejectedGenerationError
+from image_batch_studio.config import MODELS
+from image_batch_studio.history import create_run, load_run, run_saved, effective_status, atomic_json, run_lock, is_running
+from image_batch_studio.prompt_files import PromptJob
+from image_batch_studio.providers.base import GeneratedImage, GenerationParams
+from image_batch_studio.providers.bfl_provider import BFLProvider
+from image_batch_studio.providers.retry import RejectedGenerationError
 from test_regressions import FakeProvider, response
 
 
@@ -25,7 +25,7 @@ class HistoryTests(unittest.TestCase):
         self.jobs = [PromptJob('first', 'first prompt', 1), PromptJob('second', 'second prompt', 2)]
         self.spec = MODELS['nano-banana-2-flash']
         self.params = GenerationParams(resolution='2K')
-        patch('providers.retry.time.sleep').start()
+        patch('image_batch_studio.providers.retry.time.sleep').start()
         self.addCleanup(patch.stopall)
 
     def create(self, **kwargs):
@@ -105,14 +105,14 @@ class HistoryTests(unittest.TestCase):
         self.jobs = self.jobs[:1]
         self.create()
         provider = BFLProvider('test', self.spec)
-        with patch('providers.bfl_provider.requests.post', return_value=response(payload={
+        with patch('image_batch_studio.providers.bfl_provider.requests.post', return_value=response(payload={
             'id': 'original', 'polling_url': 'https://example.test/poll'})) as post, patch(
-            'providers.bfl_provider.requests.get', side_effect=requests.ReadTimeout()):
+            'image_batch_studio.providers.bfl_provider.requests.get', side_effect=requests.ReadTimeout()):
             data = run_saved(self.folder, {}, provider=provider)
         self.assertEqual(data['jobs'][0]['remote']['id'], 'original')
         self.assertEqual(data['jobs'][0]['status'], 'recoverable')
-        with patch('providers.bfl_provider.requests.post') as post, patch(
-            'providers.bfl_provider.requests.get', side_effect=[
+        with patch('image_batch_studio.providers.bfl_provider.requests.post') as post, patch(
+            'image_batch_studio.providers.bfl_provider.requests.get', side_effect=[
                 response(payload={'status': 'Ready', 'result': {'sample': 'https://example.test/image'}}), response()]):
             data = run_saved(self.folder, {}, provider=BFLProvider('test', self.spec))
         post.assert_not_called()
@@ -137,7 +137,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_manifest_replacement_failure_preserves_previous_json(self):
         data = self.create()
-        with patch('history.os.replace', side_effect=OSError('busy')):
+        with patch('image_batch_studio.history.os.replace', side_effect=OSError('busy')):
             with self.assertRaises(OSError):
                 atomic_json(self.folder / 'run.json', {'broken': True})
         self.assertEqual(load_run(self.folder), json.loads(json.dumps(data)))
@@ -182,9 +182,9 @@ class HistoryTests(unittest.TestCase):
         previous = Path.cwd()
         try:
             os.chdir(self.temp.name)
-            with patch('providers.create_provider', return_value=provider):
+            with patch('image_batch_studio.providers.create_provider', return_value=provider):
                 at = AppTest.from_file(str(app)).run(timeout=30)
-                next(t for t in at.text_area if t.label == 'Prompt').set_value('saved prompt')
+                next(t for t in at.text_area if t.label == 'Prompt').set_value('saved prompt').run(timeout=30)
                 next(b for b in at.button if b.label.endswith(' Genera')).click().run(timeout=30)
             self.assertFalse(at.exception, [e.message for e in at.exception])
             manifests = list(Path('output').glob('*/run.json'))
@@ -221,7 +221,7 @@ class HistoryTests(unittest.TestCase):
             if data['jobs'][0]['status'] == 'completed':
                 raise OSError('manifest write interrupted')
             original(path, data)
-        with patch('history.atomic_json', side_effect=interrupted):
+        with patch('image_batch_studio.history.atomic_json', side_effect=interrupted):
             run_saved(self.folder, {}, provider=FakeProvider())
         provider = FakeProvider()
         data = run_saved(self.folder, {}, provider=provider)

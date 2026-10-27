@@ -68,8 +68,11 @@ images are sent to the selected provider when you generate images. Keep `.env`
 private. This app is intended for local use; it has no user authentication or
 per-user credential isolation for a publicly hosted deployment.
 
-The model registry is in `config.py`. Provider APIs and preview model IDs may
-change; the local tests simulate API responses and do not certify live model
+The model registry is in `image_batch_studio/config.py`. Gemini models available:
+Nano Banana 2.1 (`gemini-nano-banana-2.1`, default), Nano Banana 2
+(`gemini-3.1-flash-image`), Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`) and
+Nano Banana Pro (`gemini-3-pro-image`); Nano Banana 2.1, 2 and 2 Lite also expose
+an optional thinking level. Provider APIs and model IDs may change; the local tests simulate API responses and do not certify live model
 availability. OpenAI uses its image edit endpoint when references are provided;
 there is no mask editor or interactive editing canvas.
 
@@ -125,12 +128,12 @@ folders and simulated providers/HTTP responses: no API keys or billable calls.
 
 | Path | Purpose |
 | --- | --- |
-| `app.py` | Streamlit interface |
-| `config.py` | Model registry and capabilities |
-| `prompt_files.py` | File parsing, validation and filename allocation |
-| `history.py` | Run manifests and persistent recovery |
-| `runner.py` | Batch execution and exclusive image saving |
-| `providers/` | Provider implementations and retry policy |
+| `app.py` | Streamlit interface (entry point) |
+| `image_batch_studio/config.py` | Model registry and capabilities |
+| `image_batch_studio/prompt_files.py` | File parsing, validation and filename allocation |
+| `image_batch_studio/history.py` | Run manifests and persistent recovery |
+| `image_batch_studio/runner.py` | Batch execution and exclusive image saving |
+| `image_batch_studio/providers/` | Provider implementations and retry policy |
 | `tests/` | Regression and UI tests |
 | `examples/` | Generic sample prompts |
 
@@ -139,3 +142,28 @@ folders and simulated providers/HTTP responses: no API keys or billable calls.
 [MIT](LICENSE), copyright 2026 Pietro Segreto. This license covers the project code;
 third-party services, dependencies and third-party assets retain their own terms.
 See [CHANGELOG.md](CHANGELOG.md) for the initial release contents.
+
+## GPT Image 2.5 and cost estimates
+
+Select **GPT Image 2.5 Sunburst** or **GPT Image 2.5 Flare** with the existing
+`OPENAI_API_KEY`. Both use the Image API: `/v1/images/generations` for text-only
+requests and `/v1/images/edits` when reference images are present. The existing
+GPT Image 2 option remains available. Quality settings include `auto`, `low`,
+`medium`, `high`, `xhigh`, and `max` for the new models.
+
+Before starting a manual generation or file batch, the UI estimates **image
+output cost in USD**, per image and for the selected number of images (including
+variants and any batch limit). It uses the official calculator's model-specific
+formula, actual requested pixel dimensions, and $30 per million output tokens,
+verified on 2026-09-15. With `auto`, it shows the low-to-maximum-quality scenarios;
+this is not a guaranteed spending limit.
+
+This is a partial estimate: prompt and reference-image input tokens, taxes, and
+additional attempts are excluded. Input is sent again for every variant. Actual
+consumption may differ. The full API `usage` and output cost calculated from
+reported output tokens are retained in each image's history metadata. No API
+request is made to calculate the preview.
+
+Sources: [Image generation guide and calculator](https://developers.openai.com/api/docs/guides/image-generation#cost-and-latency),
+[Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst),
+[Flare](https://developers.openai.com/api/docs/models/gpt-image-2.5-flare).

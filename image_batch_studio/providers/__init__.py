@@ -1,9 +1,9 @@
 """Factory dei provider: crea l'implementazione giusta per un ModelSpec."""
-from config import BFL, GEMINI, OPENAI, ModelSpec
-from providers.base import GeneratedImage, GenerationParams, ImageProvider
-from providers.bfl_provider import BFLProvider
-from providers.gemini_provider import GeminiProvider
-from providers.openai_provider import OpenAIProvider
+from image_batch_studio.config import BFL, GEMINI, OPENAI, ModelSpec
+from image_batch_studio.providers.base import GeneratedImage, GenerationParams, ImageProvider
+from image_batch_studio.providers.bfl_provider import BFLProvider
+from image_batch_studio.providers.gemini_provider import GeminiProvider
+from image_batch_studio.providers.openai_provider import OpenAIProvider
 
 __all__ = [
     "GeneratedImage",

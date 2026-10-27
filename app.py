@@ -12,12 +12,13 @@ from uuid import uuid4
 import streamlit as st
 from dotenv import load_dotenv
 
-from config import BFL, GEMINI, OPENAI, MODELS
-from prompt_files import PromptJob, build_jobs, guess_columns, parse_file
-from providers import GenerationParams, create_provider
-from providers.bfl_provider import dims_for_aspect
-from providers.openai_provider import dims_for_aspect as openai_dims_for_aspect
-from history import create_run, load_run, run_saved, effective_status, local_path, is_running
+from image_batch_studio.config import BFL, GEMINI, OPENAI, MODELS
+from image_batch_studio.prompt_files import PromptJob, build_jobs, guess_columns, parse_file
+from image_batch_studio.providers import GenerationParams, create_provider
+from image_batch_studio.providers.bfl_provider import dims_for_aspect
+from image_batch_studio.providers.openai_provider import dims_for_aspect as openai_dims_for_aspect
+from image_batch_studio.providers.openai_costs import estimate_output_cost
+from image_batch_studio.history import create_run, load_run, run_saved, effective_status, local_path, is_running
 
 OUTPUT_DIR = Path("output")
 
@@ -70,6 +71,15 @@ with st.sidebar:
 
     params_kwargs = {"aspect_ratio": aspect_ratio, "resolution": resolution}
 
+    if spec.thinking_levels:
+        thinking = st.selectbox(
+            "Livello di ragionamento", ["predefinito", *spec.thinking_levels],
+            help="Più ragionamento migliora composizioni complesse ma aumenta tempi e token fatturati. "
+                 "`predefinito` lascia decidere al modello.",
+        )
+        if thinking != "predefinito":
+            params_kwargs["thinking_level"] = thinking
+
     if spec.provider == BFL:
         st.subheader("Parametri FLUX.2")
         seed_text = st.text_input("Seed (vuoto = casuale)", value="", help="Intero per generazioni riproducibili.")
@@ -92,10 +102,10 @@ with st.sidebar:
             params_kwargs["steps"] = st.slider("Steps", 1, 50, 50)
 
     if spec.provider == OPENAI:
-        st.subheader("Parametri gpt-image-2")
+        st.subheader(f"Parametri {spec.label}")
         params_kwargs["quality"] = st.selectbox(
             "Qualità", list(spec.qualities),
-            help="`auto` lascia scegliere al modello; `high` costa di più ed è più lento.",
+            help="`auto` lascia scegliere al modello; livelli superiori richiedono più tempo e token.",
         )
         params_kwargs["output_format"] = st.selectbox("Formato output", ["png", "jpeg", "webp"])
         if params_kwargs["output_format"] in ("jpeg", "webp"):
@@ -176,6 +186,29 @@ def compose_prompt(body: str) -> str:
     return f"{style_prefix.strip()} {body.strip()}".strip() if style_prefix.strip() else body.strip()
 
 
+def show_cost_estimate(count: int):
+    if spec.provider != OPENAI:
+        return
+    width, height = openai_dims_for_aspect(params.aspect_ratio, params.resolution)
+    low, high = estimate_output_cost(spec.model_id, params.quality, width, height)
+
+    def usd(a, b):
+        return f"US$ {a:.5f}" if a == b else f"US$ {a:.5f} – {b:.5f}"
+
+    st.info(
+        f"**Stima costo output immagini:** {usd(low, high)} per immagine · "
+        f"**{usd(low * count, high * count)} per {count} immagini**."
+    )
+    st.caption(
+        "Stima dal calcolatore OpenAI (15/09/2026), non un preventivo totale: "
+        "esclude token del prompt e delle immagini di riferimento, imposte e ulteriori tentativi. "
+        "Gli input vengono inviati per ogni variante. "
+        + ("Con qualità auto l'intervallo mostra gli scenari low–massima qualità; "
+           "non è un limite di spesa garantito. " if params.quality == "auto" else "")
+        + "[Formula e tariffe](https://developers.openai.com/api/docs/guides/image-generation#cost-and-latency)"
+    )
+
+
 def execute(jobs: list[PromptJob], run_kind: str):
     """Lancia i job e registra i risultati in session_state."""
     try:
@@ -218,8 +251,9 @@ with tab_manual:
     manual_name = st.text_input("Nome immagine", value="immagine", help="Nome del file di output (senza estensione).")
     manual_prompt = st.text_area("Prompt", height=220, placeholder="Descrivi l'immagine da generare…")
     n_variants = st.number_input("Numero di varianti", 1, 10, 1, help="Genera N immagini con lo stesso prompt.")
+    show_cost_estimate(int(n_variants))
     if st.button("🚀 Genera", type="primary", disabled=not manual_prompt.strip()):
-        from prompt_files import sanitize_filename
+        from image_batch_studio.prompt_files import sanitize_filename
         base = sanitize_filename(manual_name or "immagine")
         jobs = [
             PromptJob(
@@ -282,7 +316,7 @@ with tab_file:
             )
 
             with st.expander("Anteprima tabella", expanded=False):
-                st.dataframe(table.rows, use_container_width=True)
+                st.dataframe(table.rows, width="stretch")
 
             if prompt_cols:
                 jobs, issues = build_jobs(
@@ -306,7 +340,7 @@ with tab_file:
                     with st.expander("Anteprima prompt estratti", expanded=True):
                         st.dataframe(
                             [{"nome file": j.name, "prompt": j.prompt[:160] + ("…" if len(j.prompt) > 160 else "")} for j in jobs],
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                     c_limit, c_var = st.columns(2)
@@ -320,6 +354,7 @@ with tab_file:
                     )
                     selected = jobs[: int(limit)] if limit else jobs
                     est = len(selected) * int(variants)
+                    show_cost_estimate(est)
                     if st.button(f"🚀 Genera batch ({est} immagini)", type="primary"):
                         final_jobs = [
                             PromptJob(
@@ -411,7 +446,7 @@ if choice:
             with st.expander('Prompt, avanzamento ed errori', expanded=True):
                 st.dataframe([{'nome': j['name'], 'prompt': j['prompt'], 'stato': labels[states[j['id']]],
                                'esecuzioni': j['executions'], 'tentativi per fase': str(j.get('phase_attempts', {})), 'errore': j.get('error') or ''}
-                              for j in data['jobs']], use_container_width=True)
+                              for j in data['jobs']], width="stretch")
                 st.caption("Le esecuzioni contano gli avvii/riprese del job; ogni fase può effettuare i retry configurati.")
             with st.expander('Registro degli eventi'):
                 st.json([{'nome': j['name'], 'eventi': j['events']} for j in data['jobs']])
@@ -444,4 +479,4 @@ if choice:
         st.download_button('Scarica immagini (zip)', buffer.getvalue(), file_name=f'{choice}.zip', mime='application/zip')
         columns = st.columns(3)
         for i, path in enumerate(images):
-            columns[i % 3].image(str(path), caption=path.stem, use_container_width=True)
+            columns[i % 3].image(str(path), caption=path.stem, width="stretch")

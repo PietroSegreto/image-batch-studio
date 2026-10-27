@@ -9,9 +9,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from prompt_files import PromptJob, unique_filename
-from providers.base import GeneratedImage, GenerationParams, ImageProvider
-from providers.retry import retry_call
+from image_batch_studio.prompt_files import PromptJob, unique_filename
+from image_batch_studio.providers.base import GeneratedImage, GenerationParams, ImageProvider
+from image_batch_studio.providers.retry import retry_call
 
 
 def _save_image(path: Path, data: bytes):

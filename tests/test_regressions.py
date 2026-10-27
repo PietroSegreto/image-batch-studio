@@ -6,14 +6,14 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from config import MODELS
-from prompt_files import PromptJob, build_jobs, sanitize_filename
-from providers.base import GeneratedImage, GenerationParams, ImageProvider
-from providers.bfl_provider import BFLProvider
-from providers.openai_provider import OpenAIProvider
-from providers.gemini_provider import GeminiProvider
-from providers.retry import RetryableGenerationError
-from runner import _save_image, run_jobs
+from image_batch_studio.config import MODELS
+from image_batch_studio.prompt_files import PromptJob, build_jobs, sanitize_filename
+from image_batch_studio.providers.base import GeneratedImage, GenerationParams, ImageProvider
+from image_batch_studio.providers.bfl_provider import BFLProvider
+from image_batch_studio.providers.openai_provider import OpenAIProvider
+from image_batch_studio.providers.gemini_provider import GeminiProvider
+from image_batch_studio.providers.retry import RetryableGenerationError
+from image_batch_studio.runner import _save_image, run_jobs
 
 
 class FakeProvider(ImageProvider):
@@ -36,7 +36,7 @@ class RegressionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.folder = Path(self.temp.name)
-        self.sleep = patch('providers.retry.time.sleep').start()
+        self.sleep = patch('image_batch_studio.providers.retry.time.sleep').start()
         self.addCleanup(patch.stopall)
         self.jobs = [PromptJob('image', 'a prompt', 1)]
         self.params = GenerationParams()
@@ -94,7 +94,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_save_retry_never_regenerates(self):
         provider = FakeProvider()
-        with patch('runner._save_image', side_effect=[OSError('busy'), None]) as save:
+        with patch('image_batch_studio.runner._save_image', side_effect=[OSError('busy'), None]) as save:
             results = self.run_batch(provider)
         self.assertTrue(results[0].ok)
         self.assertEqual(save.call_count, 2)
@@ -102,7 +102,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_disk_failure_retains_generated_bytes(self):
         provider = FakeProvider()
-        with patch('runner._save_image', side_effect=OSError('disk full')) as save:
+        with patch('image_batch_studio.runner._save_image', side_effect=OSError('disk full')) as save:
             result = self.run_batch(provider)[0]
         self.assertFalse(result.ok)
         self.assertEqual(result.image.image_bytes, b'image')
@@ -122,8 +122,8 @@ class RegressionTests(unittest.TestCase):
         provider = BFLProvider('test', MODELS['flux-2-pro'])
         submit = response(payload={'id': 'job-1', 'polling_url': 'https://example.test/poll'})
         ready = response(payload={'status': 'Ready', 'result': {'sample': 'https://example.test/image'}})
-        with patch('providers.bfl_provider.requests.post', return_value=submit) as post, patch(
-            'providers.bfl_provider.requests.get', side_effect=[
+        with patch('image_batch_studio.providers.bfl_provider.requests.post', return_value=submit) as post, patch(
+            'image_batch_studio.providers.bfl_provider.requests.get', side_effect=[
                 requests.ReadTimeout(), ready, response(503), response(),
             ],
         ) as get:
@@ -137,9 +137,9 @@ class RegressionTests(unittest.TestCase):
         for effect, expected_calls in [(requests.ReadTimeout(), 3),
                 (response(payload={'status': 'Content Moderated'}), 1)]:
             provider = BFLProvider('test', MODELS['flux-2-pro'])
-            with patch('providers.bfl_provider.requests.post', return_value=response(payload={
+            with patch('image_batch_studio.providers.bfl_provider.requests.post', return_value=response(payload={
                 'polling_url': 'https://example.test/poll'})) as post, patch(
-                'providers.bfl_provider.requests.get', side_effect=effect if isinstance(effect, Exception) else None,
+                'image_batch_studio.providers.bfl_provider.requests.get', side_effect=effect if isinstance(effect, Exception) else None,
                 return_value=effect,
             ) as get:
                 self.assertFalse(self.run_batch(provider)[0].ok)
@@ -149,15 +149,15 @@ class RegressionTests(unittest.TestCase):
     def test_openai_http_errors_are_classified(self):
         for status, expected_calls in [(400, 1), (401, 1), (429, 3), (500, 1)]:
             provider = OpenAIProvider('test', MODELS['gpt-image-2'])
-            with patch('providers.openai_provider.requests.post', return_value=response(status, {})) as post:
+            with patch('image_batch_studio.providers.openai_provider.requests.post', return_value=response(status, {})) as post:
                 self.assertFalse(self.run_batch(provider)[0].ok)
             self.assertEqual(post.call_count, expected_calls)
 
     def test_bfl_submit_retries_only_explicit_rejection(self):
         provider = BFLProvider('test', MODELS['flux-2-pro'])
-        with patch('providers.bfl_provider.requests.post', side_effect=[
+        with patch('image_batch_studio.providers.bfl_provider.requests.post', side_effect=[
             response(429), response(payload={'polling_url': 'https://example.test/poll'}),
-        ]) as post, patch('providers.bfl_provider.requests.get', side_effect=[
+        ]) as post, patch('image_batch_studio.providers.bfl_provider.requests.get', side_effect=[
             response(payload={'status': 'Ready', 'result': {'sample': 'https://example.test/image'}}),
             response(),
         ]):
@@ -166,9 +166,9 @@ class RegressionTests(unittest.TestCase):
 
     def test_bfl_download_failure_does_not_resubmit(self):
         provider = BFLProvider('test', MODELS['flux-2-pro'])
-        with patch('providers.bfl_provider.requests.post', return_value=response(payload={
+        with patch('image_batch_studio.providers.bfl_provider.requests.post', return_value=response(payload={
             'polling_url': 'https://example.test/poll'})) as post, patch(
-            'providers.bfl_provider.requests.get', side_effect=[
+            'image_batch_studio.providers.bfl_provider.requests.get', side_effect=[
                 response(payload={'status': 'Ready', 'result': {'sample': 'https://example.test/image'}}),
                 requests.ReadTimeout(), requests.ReadTimeout(), requests.ReadTimeout(),
             ],
@@ -181,15 +181,38 @@ class RegressionTests(unittest.TestCase):
         for error, calls in [(ClientError(429, {'message': 'busy'}), 3),
                              (ClientError(400, {'message': 'invalid'}), 1),
                              (ServerError(503, {'message': 'unavailable'}), 1)]:
-            with patch('providers.gemini_provider.genai.Client') as client:
+            with patch('image_batch_studio.providers.gemini_provider.genai.Client') as client:
                 provider = GeminiProvider('test', MODELS['nano-banana-2-flash'])
                 generate = client.return_value.models.generate_content
                 generate.side_effect = error
                 self.assertFalse(self.run_batch(provider)[0].ok)
                 self.assertEqual(generate.call_count, calls)
 
+    def test_gemini_models_request_config(self):
+        gemini = {k: s for k, s in MODELS.items() if s.provider == 'gemini'}
+        self.assertEqual({s.model_id for s in gemini.values()}, {
+            'gemini-nano-banana-2.1', 'gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'gemini-3-pro-image'})
+        for key, spec in gemini.items():
+            self.assertIn(spec.default_resolution, spec.resolutions)
+            for level in (None, *spec.thinking_levels):
+                with self.subTest(model=key, thinking=level), \
+                        patch('image_batch_studio.providers.gemini_provider.genai.Client') as client:
+                    generate = client.return_value.models.generate_content
+                    part = Mock(inline_data=Mock(data=b'image'))
+                    generate.return_value = Mock(candidates=[Mock(content=Mock(parts=[part]))])
+                    result = GeminiProvider('test', spec).generate('prompt', [], GenerationParams(
+                        aspect_ratio=spec.aspect_ratios[-1], resolution=spec.default_resolution,
+                        thinking_level=level))
+                    kwargs = generate.call_args.kwargs
+                    self.assertEqual(kwargs['model'], spec.model_id)
+                    self.assertEqual(kwargs['config'].image_config.aspect_ratio, spec.aspect_ratios[-1])
+                    self.assertEqual(kwargs['config'].image_config.image_size, spec.default_resolution)
+                    thinking = kwargs['config'].thinking_config
+                    self.assertEqual(thinking and thinking.thinking_level.value, level and level.upper())
+                    self.assertEqual(result.image_bytes, b'image')
+
     def test_gemini_sdk_retry_disabled(self):
-        with patch('providers.gemini_provider.genai.Client') as client:
+        with patch('image_batch_studio.providers.gemini_provider.genai.Client') as client:
             GeminiProvider('test', MODELS['nano-banana-2-flash'])
         self.assertEqual(client.call_args.kwargs['http_options'].retry_options.attempts, 1)
 

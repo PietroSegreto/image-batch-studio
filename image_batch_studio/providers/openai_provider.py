@@ -1,4 +1,4 @@
-"""Provider per gpt-image-2 (OpenAI Image API).
+"""Provider per GPT Image 2 e GPT Image 2.5 (OpenAI Image API).
 
 Flusso (developers.openai.com/api/docs/guides/image-generation):
 - senza immagini di riferimento: POST https://api.openai.com/v1/images/generations
@@ -19,9 +19,10 @@ import math
 
 import requests
 
-from config import ModelSpec
-from providers.base import GeneratedImage, GenerationParams, ImageProvider
-from providers.retry import RejectedGenerationError, RetryableGenerationError
+from image_batch_studio.config import ModelSpec
+from image_batch_studio.providers.base import GeneratedImage, GenerationParams, ImageProvider
+from image_batch_studio.providers.openai_costs import OUTPUT_USD_PER_MILLION
+from image_batch_studio.providers.retry import RejectedGenerationError, RetryableGenerationError
 
 BASE_URL = "https://api.openai.com/v1"
 TIMEOUT_S = 600
@@ -96,7 +97,11 @@ class OpenAIProvider(ImageProvider):
         params: GenerationParams,
     ) -> GeneratedImage:
         width, height = dims_for_aspect(params.aspect_ratio, params.resolution)
-        refs = reference_images[:MAX_INPUT_IMAGES]
+        if params.quality not in self._spec.qualities:
+            raise RejectedGenerationError(f"Qualità non supportata: {params.quality}")
+        if params.background == "transparent" and params.output_format == "jpeg":
+            raise RejectedGenerationError("Lo sfondo trasparente richiede PNG o WebP.")
+        refs = reference_images[:self._spec.max_reference_images]
 
         fields: dict[str, str] = {
             "model": self._spec.model_id,
@@ -154,6 +159,10 @@ class OpenAIProvider(ImageProvider):
         if refs:
             meta["riferimenti"] = len(refs)
         usage = payload.get("usage") or {}
+        if usage:
+            meta["usage"] = usage
+        if usage.get("output_tokens") is not None:
+            meta["output_cost_usd"] = usage["output_tokens"] * OUTPUT_USD_PER_MILLION / 1_000_000
         for key in ("input_tokens", "output_tokens", "total_tokens"):
             if usage.get(key) is not None:
                 meta[key] = usage[key]

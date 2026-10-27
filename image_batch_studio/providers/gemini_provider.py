@@ -5,9 +5,9 @@ import PIL.Image
 from google import genai
 from google.genai import types
 
-from config import ModelSpec
-from providers.base import GeneratedImage, GenerationParams, ImageProvider
-from providers.retry import RejectedGenerationError, RetryableGenerationError
+from image_batch_studio.config import ModelSpec
+from image_batch_studio.providers.base import GeneratedImage, GenerationParams, ImageProvider
+from image_batch_studio.providers.retry import RejectedGenerationError, RetryableGenerationError
 
 
 class GeminiProvider(ImageProvider):
@@ -37,6 +37,8 @@ class GeminiProvider(ImageProvider):
                 image_size=params.resolution,
             ),
         )
+        if params.thinking_level and params.thinking_level in self._spec.thinking_levels:
+            config.thinking_config = types.ThinkingConfig(thinking_level=params.thinking_level.upper())
 
         try:
             response = self._client.models.generate_content(

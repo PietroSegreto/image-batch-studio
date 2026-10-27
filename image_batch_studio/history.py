@@ -10,12 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from config import ModelSpec
-from prompt_files import PromptJob, unique_filename
-from providers import GenerationParams, create_provider
-from providers.bfl_provider import BFLProvider
-from providers.retry import RejectedGenerationError, retry_call
-from runner import JobResult, _save_image
+from image_batch_studio.config import ModelSpec
+from image_batch_studio.prompt_files import PromptJob, unique_filename
+from image_batch_studio.providers import GenerationParams, create_provider
+from image_batch_studio.providers.bfl_provider import BFLProvider
+from image_batch_studio.providers.retry import RejectedGenerationError, retry_call
+from image_batch_studio.runner import JobResult, _save_image
 
 
 STATES = {'pending', 'running', 'recoverable', 'saving', 'completed', 'failed', 'uncertain'}

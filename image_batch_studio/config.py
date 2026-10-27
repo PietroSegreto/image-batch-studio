@@ -11,11 +11,12 @@ GEMINI = "gemini"
 BFL = "bfl"
 OPENAI = "openai"
 
-# Aspect ratio supportati da Gemini (fonte: ai.google.dev/gemini-api/docs/image-generation)
+# Aspect ratio supportati da Gemini (fonte: ai.google.dev/gemini-api/docs/image-generation).
+# Pro e Lite accettano solo i 10 formati standard; Nano Banana 2 e 2.1 anche quelli estremi.
 GEMINI_ASPECT_RATIOS = [
-    "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
-    "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+    "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9",
 ]
+GEMINI_ASPECT_RATIOS_EXTENDED = GEMINI_ASPECT_RATIOS + ["1:4", "4:1", "1:8", "8:1"]
 
 # Per BFL non esiste un parametro aspect_ratio: si passano width/height in pixel.
 # La UI mostra comunque un aspect ratio + un target in megapixel e calcola le
@@ -56,7 +57,7 @@ PROMPT_HINT_FLUX = (
 
 
 PROMPT_HINT_OPENAI = (
-    "**gpt-image-2 segue le istruzioni alla lettera**: descrivi il soggetto e poi "
+    "**GPT Image segue istruzioni dettagliate**: descrivi il soggetto e poi "
     "dai indicazioni esplicite su composizione, inquadratura, palette, luce e "
     "stile. È il modello più affidabile per il **testo dentro l'immagine**: "
     "scrivilo fra virgolette e indica dove posizionarlo. Puoi chiedere sfondo "
@@ -78,6 +79,7 @@ class ModelSpec:
     default_resolution: str
     max_reference_images: int
     response_modalities: tuple[str, ...] = ()   # solo Gemini
+    thinking_levels: tuple[str, ...] = ()        # solo Gemini; vuoto = non configurabile
     supports_guidance_steps: bool = False        # solo flux-2-flex
     qualities: tuple[str, ...] = ()              # solo OpenAI
     prompting_hint: str = ""
@@ -88,23 +90,55 @@ MODELS: dict[str, ModelSpec] = {
     spec.key: spec
     for spec in [
         ModelSpec(
-            key="nano-banana-2-flash",
-            label="Nano Banana 2 Flash (Gemini 3.1 Flash Image)",
+            key="nano-banana-2.1",
+            label="Nano Banana 2.1 (Gemini)",
             provider=GEMINI,
-            model_id="gemini-3.1-flash-image-preview",
-            aspect_ratios=GEMINI_ASPECT_RATIOS,
+            model_id="gemini-nano-banana-2.1",
+            aspect_ratios=GEMINI_ASPECT_RATIOS_EXTENDED,
+            resolutions=["1K", "2K", "4K"],
+            default_resolution="2K",
+            max_reference_images=14,
+            response_modalities=("Image",),
+            thinking_levels=("minimal", "medium", "high"),
+            prompting_hint=PROMPT_HINT_GEMINI,
+            notes="Modello Nano Banana più recente, consigliato da Google per la maggior parte degli usi.",
+        ),
+        ModelSpec(
+            key="nano-banana-2-flash",
+            label="Nano Banana 2 (Gemini 3.1 Flash Image)",
+            provider=GEMINI,
+            model_id="gemini-3.1-flash-image",
+            aspect_ratios=GEMINI_ASPECT_RATIOS_EXTENDED,
             resolutions=["512", "1K", "2K", "4K"],
             default_resolution="2K",
             max_reference_images=14,
             response_modalities=("Image",),
+            thinking_levels=("minimal", "high"),
             prompting_hint=PROMPT_HINT_GEMINI,
-            notes="Veloce ed economico, adatto a batch numerosi.",
+            notes="Veloce ed economico, unico Gemini con risoluzione 512 px.",
+        ),
+        ModelSpec(
+            key="nano-banana-2-lite",
+            label="Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)",
+            provider=GEMINI,
+            model_id="gemini-3.1-flash-lite-image",
+            aspect_ratios=GEMINI_ASPECT_RATIOS,
+            resolutions=["1K"],
+            default_resolution="1K",
+            max_reference_images=14,
+            response_modalities=("Image",),
+            thinking_levels=("minimal", "high"),
+            prompting_hint=PROMPT_HINT_GEMINI,
+            notes=(
+                "Il più economico, solo 1K. Non ottimizzato per molte immagini di "
+                "riferimento: adatto a batch semplici."
+            ),
         ),
         ModelSpec(
             key="nano-banana-pro",
             label="Nano Banana Pro (Gemini 3 Pro Image)",
             provider=GEMINI,
-            model_id="gemini-3-pro-image-preview",
+            model_id="gemini-3-pro-image",
             aspect_ratios=GEMINI_ASPECT_RATIOS,
             resolutions=["1K", "2K", "4K"],
             default_resolution="2K",
@@ -178,5 +212,24 @@ MODELS: dict[str, ModelSpec] = {
                 "usa l'endpoint di editing (/v1/images/edits)."
             ),
         ),
+        *[
+            ModelSpec(
+                key=f"gpt-image-2.5-{variant}",
+                label=f"GPT Image 2.5 {variant.title()} (OpenAI)",
+                provider=OPENAI,
+                model_id=f"gpt-image-2.5-{variant}",
+                aspect_ratios=OPENAI_ASPECT_RATIOS,
+                resolutions=["1 MP", "2 MP", "4 MP", "8 MP"],
+                default_resolution="1 MP",
+                max_reference_images=10,
+                qualities=("auto", "low", "medium", "high", "xhigh", "max"),
+                prompting_hint=PROMPT_HINT_OPENAI,
+                notes=description + " Risoluzioni oltre 2560×1440 sperimentali.",
+            )
+            for variant, description in [
+                ("sunburst", "Adatto a editing preciso e istruzioni complesse."),
+                ("flare", "Generazione veloce di immagini di alta qualità."),
+            ]
+        ],
     ]
 }

@@ -1,7 +1,7 @@
 """Interfaccia comune dei provider di generazione immagini."""
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from providers.retry import RetryableGenerationError, retry_call
+from image_batch_studio.providers.retry import RetryableGenerationError, retry_call
 
 
 @dataclass
@@ -13,13 +13,14 @@ class GenerationParams:
     """
     aspect_ratio: str = "1:1"
     resolution: str = "1K"          # Gemini: image_size; BFL: target megapixel
+    thinking_level: str | None = None  # solo Gemini; None = default del modello
     seed: int | None = None         # solo BFL
     guidance: float | None = None   # solo flux-2-flex
     steps: int | None = None        # solo flux-2-flex
     prompt_upsampling: bool = False  # solo BFL
     safety_tolerance: int = 2       # solo BFL (0=severo, 5=permissivo)
     output_format: str = "png"      # BFL e OpenAI: jpeg | png | webp
-    quality: str = "auto"           # solo OpenAI: auto | low | medium | high
+    quality: str = "auto"           # OpenAI: auto | low | medium | high | xhigh | max
     background: str = "auto"        # solo OpenAI: auto | transparent | opaque
     moderation: str = "auto"        # solo OpenAI: auto | low
     output_compression: int = 100   # solo OpenAI, per jpeg/webp (0-100)

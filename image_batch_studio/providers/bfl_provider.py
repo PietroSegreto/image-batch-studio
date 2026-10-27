@@ -14,9 +14,9 @@ import time
 
 import requests
 
-from config import ModelSpec
-from providers.base import GeneratedImage, GenerationParams, ImageProvider
-from providers.retry import RejectedGenerationError, RetryableGenerationError, retry_call, retryable_read
+from image_batch_studio.config import ModelSpec
+from image_batch_studio.providers.base import GeneratedImage, GenerationParams, ImageProvider
+from image_batch_studio.providers.retry import RejectedGenerationError, RetryableGenerationError, retry_call, retryable_read
 
 BASE_URL = "https://api.bfl.ai/v1"
 POLL_INTERVAL_S = 1.5
